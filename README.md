@@ -20,9 +20,9 @@ Exchange rates are retrieved from the CryptoCompare API (using both the latest a
 ## Directory Structure
 
 src/
- ├── app.js                # Express API server and endpoint definitions
- ├── portfolioService.js   # Service layer for streaming CSV, computing portfolio, and fetching exchange rates
- └── transactions.csv      # CSV file with crypto transactions
+├── app.js                 # Express API server and endpoint definitions
+├── portfolioService.js    # Service layer for streaming CSV, computing portfolio, and fetching exchange rates
+└── transactions.csv       # CSV file with crypto transactions
 
 ## Installation
 1. Clone the repository:
