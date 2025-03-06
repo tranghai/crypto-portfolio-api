@@ -11,6 +11,7 @@ const csvFilePath = path.join(__dirname, 'transactions.csv');
 const rateCache = new Map();
 const CACHE_TTL = 60 * 1000;
 const API_URL = "https://min-api.cryptocompare.com/data";
+const TSYMS = 'USD'
 let portfolioCache = new Map();
 let lastCutoffTimestamp = null;
 
@@ -19,39 +20,56 @@ let lastCutoffTimestamp = null;
 * If no timestamp => get latest rates.
 * rateMap: { token: USD rate, ... }
 */
-export async function getRates(tokens, ts = null) {
-    const tokenList = [...new Set(tokens)]; // Loại bỏ trùng lặp
-    const cacheKey = ts ? `historical_${tokenList.join(',')}_${ts}` : `latest_${tokenList.join(',')}`;
-
-    if (rateCache.has(cacheKey)) {
-        const { rateMap, timestamp } = rateCache.get(cacheKey);
-        if (Date.now() - timestamp < CACHE_TTL) {
-            return rateMap;
+export async function getRates(tokens, ts) {
+    const tokenList = Array.from(new Set(tokens));
+    if (!ts) {
+        const cacheKey = `batch_latest_${tokenList.sort().join(',')}`;
+        const now = Date.now();
+        if (rateCache.has(cacheKey)) {
+            const { rateMap, timestamp } = rateCache.get(cacheKey);
+            if (now - timestamp < CACHE_TTL) {
+                return rateMap;
+            }
         }
-    }
-
-    const url = ts
-        ? `${API_URL}/pricehistorical?fsym=${tokenList[0]}&tsyms=USD&ts=${ts}`
-        : `${API_URL}/pricemulti?fsyms=${tokenList.join(',')}&tsyms=USD`;
-
-    const rateMap = await fetchRates(url, tokenList, ts);
-    rateCache.set(cacheKey, { rateMap, timestamp: Date.now() });
-    return rateMap;
-}
-
-async function fetchRates(url, tokens, ts) {
-    try {
+        const symbols = tokenList.join(',');
+        const url = `${API_URL}/pricemulti?fsyms=${symbols}&tsyms=${TSYMS}`;
         const response = await fetch(url);
-        if (!response.ok) throw new Error(`Error getting exchange rate: ${response.statusText}`);
-
+        if (!response.ok) {
+            throw new Error(`Error getting exchange rate: ${response.statusText}`);
+        }
         const data = await response.json();
-        return tokens.reduce((rateMap, token) => {
-            rateMap[token] = ts ? (data[token]?.USD || 0) : (data[token]?.USD || 0);
-            return rateMap;
-        }, {});
-    } catch (error) {
-        console.error("Fetch error:", error);
-        return tokens.reduce((rateMap, token) => ({ ...rateMap, [token]: 0 }), {});
+        const rateMap = {};
+        tokenList.forEach(token => {
+            rateMap[token] = data[token]?.USD || 0;
+        });
+        rateCache.set(cacheKey, { rateMap, timestamp: now });
+        return rateMap;
+    } else {
+        const now = Date.now();
+        const rateMap = {};
+        await Promise.all(
+            tokenList.map(async (token) => {
+                const key = `${token}_${ts}`;
+                if (rateCache.has(key)) {
+                    const { rate, timestamp } = rateCache.get(key);
+                    if (now - timestamp < CACHE_TTL) {
+                        rateMap[token] = rate;
+                        return;
+                    }
+                }
+                const url = `${API_URL}/pricehistorical?fsym=${token}&tsyms=${TSYMS}&ts=${ts}`;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    rateMap[token] = 0;
+                    return;
+                }
+                const data = await response.json();
+                const rate = data[token]?.USD || 0;
+                rateCache.set(key, { rate, timestamp: now });
+                rateMap[token] = rate;
+            })
+        );
+        return rateMap;
     }
 }
 

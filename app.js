@@ -77,6 +77,7 @@ app.get('/portfolio/date/:date', async (req, res) => {
         const portfolioMap = await computePortfolioStream(cutoffTimestamp);
         const tokens = Array.from(portfolioMap.keys());
         const rates = await getRates(tokens, cutoffTimestamp);
+        console.log({ rates })
         const result = {};
         tokens.forEach((token) => {
             const balance = portfolioMap.get(token);
